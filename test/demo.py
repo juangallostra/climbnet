@@ -9,7 +9,7 @@ from detectron2.data.datasets import register_coco_instances
 from detectron2.engine import DefaultPredictor
 from detectron2.utils.visualizer import ColorMode
 from detectron2.utils.visualizer import Visualizer
-# from PIL import Image
+from PIL import Image
 import numpy as np
 
 
@@ -38,19 +38,17 @@ def run_inference(image_path, model_path, output_path):
 
     # import pdb; pdb.set_trace()
 
+    # get hold masks
     mask = outputs['instances'].get('pred_masks')
     mask = mask.to('cpu')
-    num, h, w = mask.shape
+    _, h, w = mask.shape
     bin_mask = np.zeros((h, w))
 
+    # build binary mask
     for m in mask:
-        # print(m)
-        bin_mask = np.add(np.array(bin_mask), np.array(m.long()))
-        # bin_mask+= m
-    # import pdb; pdb.set_trace()
-    filename = output_path
-    cv2.imwrite(filename, np.array(bin_mask), [cv2.IMWRITE_PNG_BILEVEL, 1])
-    cv2.imshow(filename, np.array(bin_mask))
+        bin_mask = np.add(bin_mask, np.array(m.long()))
+    cv2.imwrite(output_path, np.array(bin_mask), [cv2.IMWRITE_PNG_BILEVEL, 1])
+    cv2.imshow(output_path, np.array(bin_mask))
 
     v = Visualizer(im[:, :, ::-1],
                    metadata=train_metadata,
@@ -62,6 +60,32 @@ def run_inference(image_path, model_path, output_path):
     cv2.imshow('climbnet', v.get_image()[:, :, ::-1])
     cv2.waitKey(0)
 
+def concat_images_v(images_list):
+    images = [Image.open(i) for i in images_list]
+    overall_height = sum([i.height for i in images])
+    dst = Image.new('RGB', (max([i.width for i in images]), overall_height), (255, 255, 255))
+    h = 0
+    for im in images:
+        dst.paste(im, (0, h))
+        h += im.height
+    return dst
+
+def poly_approx(image):
+    img = cv2.imread(image)
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, threshold = cv2.threshold(img_gray, 245, 255, cv2.THRESH_BINARY_INV)
+    contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # For each contour approximate the curve and
+    # detect the shapes.
+    for cnt in contours[1::]:
+        # epsilon = 0.01*cv2.arcLength(cnt, True)
+        epsilon = 0.005*cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, epsilon, True)
+        # print(approx)
+        cv2.drawContours(img, [approx], 0, (0, 255, 0), 3)
+    cv2.imshow("final", img)
+    cv2.imwrite('contours.png', img)
+    cv2.waitKey(0)
 
 if __name__ == "__main__":
     import argparse
@@ -76,4 +100,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    run_inference(args.image_path, args.model_path, args.output_image_path)
+    # run_inference(args.image_path, args.model_path, args.output_image_path)
+
+    # concat_images_v(['2.png', '3.png', '4.png']).save('all_test.png')
+    poly_approx('all_test.png')
