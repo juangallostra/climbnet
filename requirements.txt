@@ -1,7 +1,7 @@
 Cython==0.29.17
-opencv-python==4.2.0.34
-torch==1.5.0
-torchvision==0.6.0
-git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI #pycocotools
+opencv-python==4.3.0.38
+torch==1.10.1
+torchvision==0.11.2
+pycocotools==2.0.4
 git+https://github.com/facebookresearch/detectron2.git #detectron2
 

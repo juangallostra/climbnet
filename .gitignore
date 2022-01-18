@@ -2,4 +2,6 @@
 test/*.pth
 venv/
 .idea/
-
+model_weights/
+*.png
+*.jpg
