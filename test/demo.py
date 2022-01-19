@@ -1,4 +1,5 @@
 import os
+import json
 
 import cv2
 from detectron2 import model_zoo
@@ -12,6 +13,12 @@ from detectron2.utils.visualizer import Visualizer
 from PIL import Image
 import numpy as np
 
+
+# 1. split input image into subimages
+# 2. detect holds for each image
+# 3. approx holds by polygons
+# 4. compute polygon "world" coordinates
+# 5. store all data in a json file
 
 def run_inference(image_path, model_path, output_path):
     register_coco_instances("climb_dataset", {}, "./mask.json", "")
@@ -77,15 +84,33 @@ def poly_approx(image):
     contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     # For each contour approximate the curve and
     # detect the shapes.
+    approximations = []
     for cnt in contours[1::]:
         # epsilon = 0.01*cv2.arcLength(cnt, True)
         epsilon = 0.005*cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, epsilon, True)
+        approximations.append([a[0] for a in approx.tolist()])
         # print(approx)
         cv2.drawContours(img, [approx], 0, (0, 255, 0), 3)
+    with open('test_pol.json', 'w') as f:
+        f.write(json.dumps(dict(holds=approximations)))
     cv2.imshow("final", img)
     cv2.imwrite('contours.png', img)
     cv2.waitKey(0)
+
+def point_in_polygon(polygon_file):
+    from shapely.geometry import Point
+    from shapely.geometry.polygon import Polygon
+
+    with open(polygon_file, 'r') as f:
+        polygons = json.loads(f.read()).get('holds')
+
+    point = Point(545, 150)
+    Ppolygons = []
+    for p in polygons:
+        if len(p) >= 3:
+            Ppolygons.append(Polygon(tuple(tuple(c) for c in p)))
+    return [polygon.contains(point) for polygon in Ppolygons]
 
 if __name__ == "__main__":
     import argparse
@@ -100,7 +125,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # run_inference(args.image_path, args.model_path, args.output_image_path)
-
-    # concat_images_v(['2.png', '3.png', '4.png']).save('all_test.png')
+    run_inference(args.image_path, args.model_path, args.output_image_path)
+    concat_images_v(['2.png', '3.png', '4.png']).save('all_test.png')
     poly_approx('all_test.png')
+    print(point_in_polygon('test_pol.json'))
