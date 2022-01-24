@@ -16,13 +16,19 @@ from detectron2.engine import DefaultPredictor
 from detectron2.utils.visualizer import ColorMode
 from detectron2.utils.visualizer import Visualizer
 
-IMAGE_EXTENSION = '.png'
+OUTPUT_IMAGE_EXTENSION = '.png'
 INPUT_DIR = 'raw_images'
 OUTPUT_DIR = 'processed_images'
 
 # All this should better be refactored into a class
 
-def segment_image_into_tiles(filename, tile_dimensions = (None, None), dir_in = "", dir_out = "", ext = IMAGE_EXTENSION, save_tiles=True):
+def segment_image_into_tiles(
+    filename,
+    tile_dimensions = (None, None),
+    dir_in = "",
+    dir_out = "",
+    ext = OUTPUT_IMAGE_EXTENSION,
+    save_tiles=True):
     """
     Segments an image into tiles.
 
@@ -126,7 +132,7 @@ def find_holds(tiles, predictor, train_metadata, device, save_tiles=True, show_r
 def get_processed_name(tile):
     name, _ = os.path.splitext(tile)
     name = name.replace('raw', 'processed')
-    return name + '_processed' + IMAGE_EXTENSION
+    return name + '_processed' + OUTPUT_IMAGE_EXTENSION
 
 def concat_images_v(images_list):
     images = [Image.open(i) for i in images_list]
@@ -216,4 +222,4 @@ if __name__ == '__main__':
     main(f, args.model_path, args.tile_width, args.tile_height, args.combine_results)
 
 # sample run:
-# > python .\extract_holds.py s1.jpg ..\model_weights\model_d2_R_50_FPN_3x.pth 0 600 False
+# > python .\extract_holds.py raw_images ..\model_weights\model_d2_R_50_FPN_3x.pth 0 600 False
