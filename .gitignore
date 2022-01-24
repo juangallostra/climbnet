@@ -6,3 +6,4 @@ model_weights/
 *.png
 *.jpg
 extracted_data/
+*/__pycache__/
