@@ -75,9 +75,10 @@ class Predictor:
             masks[tile] = bin_mask
 
             if save_result:
-                p_name = get_processed_name(tile)
-                cv2.imwrite(p_name, np.array(bin_mask), [
-                            cv2.IMWRITE_PNG_BILEVEL, 1])
+                pass
+                # p_name = get_processed_name(tile)
+                # cv2.imwrite(p_name, np.array(bin_mask), [
+                #             cv2.IMWRITE_PNG_BILEVEL, 1])
                 # cv2.imshow(p_name, np.array(bin_mask))
 
             if show_result:
