@@ -1,62 +1,8 @@
-import cv2
 import os
 from itertools import product
-
-
-from detectron2 import model_zoo
-from detectron2.config import get_cfg
-from detectron2.data import DatasetCatalog
-from detectron2.data import MetadataCatalog
-from detectron2.data.datasets import register_coco_instances
-from detectron2.engine import DefaultPredictor
-from detectron2.utils.visualizer import ColorMode
-from detectron2.utils.visualizer import Visualizer
 from PIL import Image
-
-
-class Predictor:
-    def __init__(self, model_path):
-        self.model_path = model_path
-        # Should I let the user specify these?
-        self.mask_path = "./mask.json"
-        self.config_file = "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
-        self.device = "cpu"
-        self.dataset = "climb_dataset"
-        # Set after configuration
-        self.predictor = None
-        self.train_metadata = None
-
-    def configure(self):
-        if self.predictor is None and self.train_metadata is None:
-            return
-
-        register_coco_instances(self.dataset, {}, self.mask_path, "")
-
-        cfg = get_cfg()
-        cfg.merge_from_file(model_zoo.get_config_file(self.config_file))
-        cfg.DATALOADER.NUM_WORKERS = 1
-        # 3 classes (hold, volume, downclimb)
-        cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
-        cfg.MODEL.WEIGHTS = os.path.join(self.model_path)
-        cfg.MODEL.DEVICE = self.device
-        cfg.DATASETS.TEST = (self.dataset,)
-        # set the testing threshold for this model
-        cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.75
-
-        # setup inference
-        predictor = DefaultPredictor(cfg)
-        train_metadata = MetadataCatalog.get(self.dataset)
-
-        # dataset catalog needs to exist so the polygon classes show up correctly
-        DatasetCatalog.get(self.dataset)
-
-        self.predictor = predictor
-        self.train_metadata = train_metadata
-
-        return predictor, train_metadata,
-
-    def predict(self):
-        pass
+import cv2
+import json
 
 
 class Wall:
@@ -64,11 +10,11 @@ class Wall:
         self.predictor = predictor
         self.image_path = image_path
         self.output_dir = output_dir
-        # internal values
+        # internal values - not a fan of maintaining partial state
         self._name, self._ext = self._process_image_path(self.image_path)
-        self._tiles = None # ?
-        self._tile_size = None # ?
-        self._img_size = None # ?
+        self._tiles = None  # ?
+        self._tile_size = None  # ?
+        self._img_size = None  # ?
 
     def _process_image_path(self, image_path):
         img_path = os.path.normpath(image_path).split(os.path.sep)
@@ -82,8 +28,10 @@ class Wall:
         self._img_size = (img_w, img_h)
         tile_w = tile_width if tile_width is not None else img_w
         tile_h = tile_height if tile_height is not None else img_h
-        grid = product(range(0, img_h-img_h % tile_h, tile_h),
-                       range(0, img_w-img_w % tile_w, tile_w))
+        # grid = product(range(0, img_h-img_h % tile_h, tile_h),
+        #                range(0, img_w-img_w % tile_w, tile_w))
+        grid = product(range(0, img_h, tile_h),
+                       range(0, img_w, tile_w))
         for i, j in grid:
             box = (j, i, j+tile_w, i+tile_h)
             tile = img.crop(box)
@@ -98,20 +46,56 @@ class Wall:
         return tiles
 
     def merge_tiles(self, store_result=True, output_file_name="merged"):
+        # TODO: make this method generic
         if self._tiles is None:
             return None
         tile_w, tile_h = self._tile_size
         img_w, img_h = self._img_size
         if tile_w is None or tile_h is None:
             return None
-        grid = product(range(0, img_h-img_h % tile_h, tile_h),
-                       range(0, img_w-img_w % tile_w, tile_w))
+        # grid = product(range(0, img_h-img_h % tile_h, tile_h),
+        #                range(0, img_w-img_w % tile_w, tile_w))
+        grid = product(range(0, img_h, tile_h),
+                       range(0, img_w, tile_w))
         dst_img = Image.new('RGB', (img_w, img_h), (255, 255, 255))
         for i, j in grid:
             box = (j, i)
             tile_name = f'{self._name}_{i}_{j}'
             dst_img.paste(self._tiles[tile_name], box)
         if store_result:
-            dst_img.save(os.path.join(self.output_dir, f'{output_file_name}{self._ext}'))
+            dst_img.save(os.path.join(self.output_dir,
+                         f'{output_file_name}{self._ext}'))
         return dst_img
 
+    def find_holds(self, save_result=True, show_result=False):
+        pass
+
+    def extract_polygons(self, save_result=True, show_result=False):
+        img = cv2.imread(self.image_path)
+        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, threshold = cv2.threshold(img_gray, 245, 255, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # For each contour approximate the curve and
+        # detect the shapes.
+        approximations = []
+        for cnt in contours[1::]:
+            # epsilon = 0.01*cv2.arcLength(cnt, True)
+            epsilon = 0.005*cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, epsilon, True)
+            approximations.append([a[0] for a in approx.tolist()])
+            # print(approx)
+            cv2.drawContours(img, [approx], 0, (0, 255, 0), 3)
+        with open('test_pol.json', 'w') as f:
+            f.write(json.dumps(dict(holds=approximations)))
+        if save_result:    
+            cv2.imwrite('contours.png', img)
+        if show_result:
+            cv2.imshow('final', img)
+            cv2.waitKey(0)
+
+
+if __name__ == '__main__':
+    # some tests
+    w = Wall('./raw_images/monkey_rock_V3.JPG', None)
+    w.segment_image(tile_width=400, tile_height=400, store_result=True)
+    w.merge_tiles(store_result=True, output_file_name="merged")
